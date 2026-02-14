@@ -1,8 +1,8 @@
 name: Weather Data Monitor
 
 on:
-  schedule:
-    - cron: '0 */3 * * *'  # Runs every 3 hours (00:00, 03:00, etc.)
+  # schedule:
+    # - cron: '0 */3 * * *'  # Runs every 3 hours (00:00, 03:00, etc.)
   workflow_dispatch:      # Allows manual trigger
 
 jobs:
