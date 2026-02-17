@@ -1,81 +1,87 @@
+import requests
 import csv
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
-from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
 
 # --- CONFIGURATION ---
-URL = "https://kachelmannwetter.com/de/wetter/2876218-lohmar"
+LAT = "50.816667"
+LON = "7.216667"
+API_URL = f"https://api.brightsky.dev/weather?lat={LAT}&lon={LON}&tz=Europe/Berlin"
+
 base_path = Path(__file__).parent
 csv_path = base_path / "wetterbericht.csv"
 
-def get_weather_data():
-    with sync_playwright() as p:
-        # Launch browser (headless=True is required for GitHub Actions)
-        browser = p.chromium.launch(headless=True)
-        # Use a realistic viewport and user agent
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-        )
-        page = context.new_page()
+def get_weather():
+    print(f"Fetching weather data for Lohmar ({LAT}, {LON})...")
+    try:
+        response = requests.get(API_URL, timeout=20)
+        response.raise_for_status()
+        data = response.json()
         
-        print(f"Opening {URL}...")
-        page.goto(URL, wait_until="networkidle")
-
-        # Wait specifically for the nexthours container to ensure AJAX loaded
-        page.wait_for_selector(".nexthours-hour", timeout=15000)
+        all_hours = data.get("weather", [])
         
-        # Get the rendered HTML
-        html = page.content()
-        browser.close()
-        return html
+        # Use timezone-aware 'now' to match API timestamps
+        now = datetime.now(timezone.utc)
+        
+        forecast_selection = []
+        for hour_data in all_hours:
+            # Parse API timestamp (which is offset-aware)
+            ts = datetime.fromisoformat(hour_data['timestamp'])
+            
+            # Start from the current hour (ignoring minutes/seconds)
+            if ts >= now.replace(minute=0, second=0, microsecond=0):
+                forecast_selection.append(hour_data)
+            
+            if len(forecast_selection) == 3:
+                break
 
-def parse_and_save(html):
-    soup = BeautifulSoup(html, 'html.parser')
-    forecast_items = soup.find_all("div", class_="nexthours-hour")[:3]
-    
-    if not forecast_items:
-        print("No forecast items found in HTML.")
+        # Load existing timestamps to prevent duplicates if manually triggered
+        existing_entries = set()
+        if csv_path.exists():
+            with csv_path.open("r", encoding="utf-8") as f:
+                reader = csv.DictReader(f, delimiter=";")
+                for row in reader:
+                    existing_entries.add(f"{row['Datum']}-{row['Vorhersage_Zeit']}")
+
+        rows_to_log = []
+        for item in forecast_selection:
+            time_obj = datetime.fromisoformat(item['timestamp'])
+            d_str = time_obj.strftime("%d.%m.%Y")
+            t_str = time_obj.strftime("%H:%M")
+            
+            # Only add if this specific hour isn't already in the CSV
+            if f"{d_str}-{t_str}" not in existing_entries:
+                rows_to_log.append({
+                    "Datum": d_str,
+                    "Vorhersage_Zeit": t_str,
+                    "Temperatur": f"{item['temperature']}".replace(".", ","),
+                    "Bedingung": item.get('condition', 'N/A').capitalize(),
+                    "Regen_Chance": f"{item.get('precipitation_probability', 0)}%",
+                    "Zeit_der_Abfrage": datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+                })
+            
+        return rows_to_log
+
+    except Exception as e:
+        print(f"Error fetching data: {e}")
+        return []
+
+def save_to_csv(data):
+    if not data:
+        print("No new unique data to save.")
         return
 
-    rows_to_log = []
-    german_time_now = datetime.now() + timedelta(hours=1)
+    fieldnames = ["Datum", "Vorhersage_Zeit", "Temperatur", "Bedingung", "Regen_Chance", "Zeit_der_Abfrage"]
+    file_exists = csv_path.exists()
 
-    for item in forecast_items:
-        try:
-            time_str = item.find("div", class_="fc-hours").get_text(strip=True).replace(" Uhr", "")
-            temp = item.find("div", class_="fc-temp").get_text(strip=True)
-            # Find title in the symbol div
-            symbol_div = item.find("div", class_="fc-symbol")
-            condition = symbol_div.get("title", "N/A") if symbol_div else "N/A"
-            
-            rain_div = item.find("div", class_="fc-rain")
-            rain_prob = rain_div.get_text(strip=True) if rain_div else "0%"
+    with csv_path.open("a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
+        if not file_exists:
+            writer.writeheader()
+        writer.writerows(data)
+    
+    print(f"Successfully logged {len(data)} new entries.")
 
-            rows_to_log.append({
-                "Datum": german_time_now.strftime("%d.%m.%Y"),
-                "Vorhersage_Zeit": time_str,
-                "Temperatur": temp,
-                "Bedingung": condition,
-                "Regen_Chance": rain_prob,
-                "Zeit_der_Abfrage": german_time_now.strftime("%d.%m.%Y %H:%M:%S") + " (UTC+1)"
-            })
-        except Exception as e:
-            print(f"Error parsing block: {e}")
-
-    if rows_to_log:
-        fieldnames = ["Datum", "Vorhersage_Zeit", "Temperatur", "Bedingung", "Regen_Chance", "Zeit_der_Abfrage"]
-        file_exists = csv_path.exists()
-        with csv_path.open("a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
-            if not file_exists:
-                writer.writeheader()
-            writer.writerows(rows_to_log)
-        print(f"Successfully logged {len(rows_to_log)} rows to {csv_path.name}")
-
-# --- EXECUTION ---
-try:
-    rendered_html = get_weather_data()
-    parse_and_save(rendered_html)
-except Exception as e:
-    print(f"Script failed: {e}")
+if __name__ == "__main__":
+    weather_data = get_weather()
+    save_to_csv(weather_data)

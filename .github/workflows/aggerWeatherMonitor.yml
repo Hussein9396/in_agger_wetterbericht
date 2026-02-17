@@ -1,15 +1,15 @@
-name: Weather Data Monitor
+name: Lohmar Weather Monitor
 
 on:
-  # schedule:
-    # - cron: '0 */3 * * *'  # Runs every 3 hours (00:00, 03:00, etc.)
-  workflow_dispatch:      # Allows manual trigger
+  schedule:
+    - cron: '0 */3 * * *'  # Runs every 3 hours at minute 0
+  workflow_dispatch:      # Manual trigger button
 
 jobs:
   run-and-save:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write    # Required to save the CSV back to the repo
     
     steps:
       - name: Checkout Repository
@@ -21,9 +21,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install Dependencies
-        run: |
-          pip install requests beautifulsoup4 playwright
-          playwright install chromium --with-deps
+        run: pip install requests
 
       - name: Run Weather Script
         run: python get_wetterbericht.py
