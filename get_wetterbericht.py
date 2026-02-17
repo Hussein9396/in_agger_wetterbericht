@@ -3,81 +3,76 @@ import csv
 from datetime import datetime, timezone
 from pathlib import Path
 
-# --- CONFIGURATION ---
+# --- Configuration ---
+ORT = "Lohmar"
 LAT = "50.816667"
 LON = "7.216667"
-# Added date parameter to avoid 422 errors and ensure we start 'now'
-now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M")
+now_dt = datetime.now()
+now_iso = now_dt.strftime("%Y-%m-%dT%H:%M")
 API_URL = f"https://api.brightsky.dev/weather?lat={LAT}&lon={LON}&date={now_iso}&tz=Europe/Berlin"
 
 base_path = Path(__file__).parent
 csv_path = base_path / "wetterbericht.csv"
 
-def get_weather():
-    print(f"Fetching weather data for Lohmar ({LAT}, {LON})...")
+def get_current_weather():
+    print(f"Hole aktuelle Wetterdaten für {ORT}...")
     try:
         response = requests.get(API_URL, timeout=20)
         response.raise_for_status()
         data = response.json()
         
         all_hours = data.get("weather", [])
-        now_utc = datetime.now(timezone.utc)
+        now_utc = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
         
-        forecast_selection = []
-        for hour_data in all_hours:
-            ts = datetime.fromisoformat(hour_data['timestamp'])
-            # Match current hour and next two
-            if ts >= now_utc.replace(minute=0, second=0, microsecond=0):
-                forecast_selection.append(hour_data)
-            if len(forecast_selection) == 3:
+        current_data = None
+        for hour in all_hours:
+            ts = datetime.fromisoformat(hour['timestamp'])
+            if ts == now_utc:
+                current_data = hour
                 break
+        
+        if not current_data:
+            return None
 
-        # Check existing entries to avoid duplicates
-        existing_entries = set()
-        if csv_path.exists():
-            with csv_path.open("r", encoding="utf-8") as f:
-                reader = csv.DictReader(f, delimiter=";")
-                for row in reader:
-                    existing_entries.add(f"{row['Datum']}-{row['Stunde']}")
-
-        rows_to_log = []
-        for item in forecast_selection:
-            time_obj = datetime.fromisoformat(item['timestamp'])
-            d_str = time_obj.strftime("%d.%m.%Y")
-            h_str = time_obj.strftime("%H:%M")
-            
-            if f"{d_str}-{h_str}" not in existing_entries:
-                rows_to_log.append({
-                    "Datum": d_str,
-                    "Stunde": h_str,
-                    "Temperatur": f"{item.get('temperature', 0)}".replace(".", ","),
-                    "Bedingung": item.get('condition', 'unknown').capitalize(),
-                    "Regen_Chance": f"{item.get('precipitation_probability', 0)}%",
-                    "Regen_Menge": f"{item.get('precipitation', 0)}".replace(".", ","),
-                    "Abfrage_Zeit": datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-                })
-            
-        return rows_to_log
+        # Get current weather data and format it
+        row = {
+            "Ort": ORT,
+            "Datum": now_dt.strftime("%d.%m.%Y"),
+            "Zeit": now_dt.strftime("%H:00"),
+            "Temperatur": f"{current_data.get('temperature', 0)}".replace(".", ","),
+            "Feuchtigkeit_Prozent": current_data.get('relative_humidity', 0),
+            "Wind_kmh": f"{current_data.get('wind_speed', 0)}".replace(".", ","),
+            "Bedingung": current_data.get('condition', 'Unbekannt').capitalize(),
+            "Wolken_Prozent": current_data.get('cloud_cover', 0),
+            "Regen_Wahrscheinlichkeit": f"{current_data.get('precipitation_probability', 0)}%",
+            "Regen_Menge_mm": f"{current_data.get('precipitation', 0)}".replace(".", ","),
+            "Abfrage_Zeitpunkt": now_dt.strftime("%d.%m.%Y %H:%M:%S")
+        }
+        return row
 
     except Exception as e:
-        print(f"Error: {e}")
-        return []
+        print(f"Fehler: {e}")
+        return None
 
-def save_to_csv(data):
-    if not data:
-        print("No new data.")
+def speichere_in_csv(row):
+    if not row:
         return
 
-    fieldnames = ["Datum", "Stunde", "Temperatur", "Bedingung", "Regen_Chance", "Regen_Menge", "Abfrage_Zeit"]
+    fieldnames = [
+        "Ort", "Datum", "Zeit", "Temperatur", "Feuchtigkeit_Prozent", 
+        "Wind_kmh", "Bedingung", "Wolken_Prozent", 
+        "Regen_Wahrscheinlichkeit", "Regen_Menge_mm", "Abfrage_Zeitpunkt"
+    ]
     file_exists = csv_path.exists()
 
     with csv_path.open("a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
         if not file_exists:
             writer.writeheader()
-        writer.writerows(data)
-    print(f"Logged {len(data)} entries.")
+        writer.writerow(row)
+    
+    print(f"Wetterbericht für {ORT} am {row['Datum']} um {row['Zeit']} gespeichert.")
 
 if __name__ == "__main__":
-    weather_data = get_weather()
-    save_to_csv(weather_data)
+    daten = get_current_weather()
+    speichere_in_csv(daten)
