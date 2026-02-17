@@ -1,49 +1,54 @@
 import requests
 import csv
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
+
 from pathlib import Path
 
 # --- KONFIGURATION ---
 ORT = "Lohmar"
 LAT = "50.816667"
 LON = "7.216667"
+TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
-# Startzeitpunkt für die API (jetzt)
-now_dt = datetime.now()
-now_iso = now_dt.strftime("%Y-%m-%dT%H:%M")
+# Aktuelle Zeit in Berlin holen
+now_berlin = datetime.now(TZ_BERLIN)
+now_iso = now_berlin.strftime("%Y-%m-%dT%H:%M")
 API_URL = f"https://api.brightsky.dev/weather?lat={LAT}&lon={LON}&date={now_iso}&tz=Europe/Berlin"
 
 base_path = Path(__file__).parent
 csv_path = base_path / "wetterbericht.csv"
 
 def format_wert(wert, ist_prozent=False):
-    """Behandelt None-Werte und deutsches Zahlenformat."""
     if wert is None:
-        return "-"
+        return "0"
     formatiert = str(wert).replace(".", ",")
     return f"{formatiert}%" if ist_prozent else formatiert
 
 def hole_wetter_daten():
-    print(f"Hole Wetterdaten für {ORT} (3-Stunden-Fenster)...")
+    print(f"Hole Wetterdaten für {ORT} (Lokalzeit Berlin)...")
     try:
         response = requests.get(API_URL, timeout=20)
         response.raise_for_status()
         data = response.json()
         all_hours = data.get("weather", [])
         
-        # Wir suchen die aktuelle Stunde (UTC-Vergleich)
-        now_utc = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        # Vergleichszeitpunkt auf die volle Stunde gerundet (in Berlin Zeit)
+        vergleich_zeit = now_berlin.replace(minute=0, second=0, microsecond=0)
         
         forecast_selection = []
         for hour_data in all_hours:
-            ts = datetime.fromisoformat(hour_data['timestamp'])
-            # Nimm die aktuelle Stunde und die 2 darauf folgenden
-            if ts >= now_utc:
+            # Zeitstempel von API (kommt als UTC+1/+2) in Berlin-Objekt umwandeln
+            ts_api = datetime.fromisoformat(hour_data['timestamp']).astimezone(TZ_BERLIN)
+            
+            if ts_api >= vergleich_zeit:
                 forecast_selection.append(hour_data)
             if len(forecast_selection) == 3:
                 break
         
-        # Bereits existierende Einträge laden (Doubletten-Schutz)
         existierende = set()
         if csv_path.exists():
             with csv_path.open("r", encoding="utf-8") as f:
@@ -52,10 +57,11 @@ def hole_wetter_daten():
                     existierende.add(f"{row['Datum']}-{row['Zeit']}")
 
         neue_zeilen = []
-        abfrage_zeit = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        # Zeitstempel der Abfrage auch in Berlin-Zeit
+        abfrage_zeit = now_berlin.strftime("%d.%m.%Y %H:%M:%S")
 
         for item in forecast_selection:
-            ts_local = datetime.fromisoformat(item['timestamp'])
+            ts_local = datetime.fromisoformat(item['timestamp']).astimezone(TZ_BERLIN)
             datum_str = ts_local.strftime("%d.%m.%Y")
             zeit_str = ts_local.strftime("%H:00")
             
@@ -75,30 +81,22 @@ def hole_wetter_daten():
                 })
         
         return neue_zeilen
-
     except Exception as e:
         print(f"Fehler: {e}")
         return []
 
 def speichere_in_csv(zeilen):
     if not zeilen:
-        print("Keine neuen Daten zum Speichern.")
+        print("Keine neuen Daten.")
         return
-
-    fieldnames = [
-        "Ort", "Datum", "Zeit", "Temperatur", "Feuchtigkeit_Prozent", 
-        "Wind_kmh", "Bedingung", "Wolken_Prozent", 
-        "Regen_Wahrscheinlichkeit", "Regen_Menge_mm", "Abfrage_Zeitpunkt"
-    ]
+    fieldnames = ["Ort", "Datum", "Zeit", "Temperatur", "Feuchtigkeit_Prozent", "Wind_kmh", "Bedingung", "Wolken_Prozent", "Regen_Wahrscheinlichkeit", "Regen_Menge_mm", "Abfrage_Zeitpunkt"]
     file_exists = csv_path.exists()
-
     with csv_path.open("a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
         if not file_exists:
             writer.writeheader()
         writer.writerows(zeilen)
-    
-    print(f"{len(zeilen)} neue Einträge gespeichert.")
+    print(f"{len(zeilen)} Einträge gespeichert.")
 
 if __name__ == "__main__":
     daten = hole_wetter_daten()
