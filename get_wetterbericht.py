@@ -4,9 +4,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # --- CONFIGURATION ---
-LAT = "50.84"
-LON = "7.21"
-API_URL = f"https://api.brightsky.dev/weather?lat={LAT}&lon={LON}&tz=Europe/Berlin"
+LAT = "50.816667"
+LON = "7.216667"
+
+now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M")
+API_URL = f"https://api.brightsky.dev/weather?lat={LAT}&lon={LON}&date={now_iso}&tz=Europe/Berlin"
 
 base_path = Path(__file__).parent
 csv_path = base_path / "wetterbericht.csv"
