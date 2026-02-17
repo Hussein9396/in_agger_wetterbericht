@@ -1,0 +1,4 @@
+Ort;Datum;Zeit;Temperatur;Feuchtigkeit_Prozent;Wind_kmh;Bedingung;Wolken_Prozent;Regen_Wahrscheinlichkeit;Regen_Menge_mm;Abfrage_Zeitpunkt
+Lohmar;17.02.2026;19:00;3,4;0;20,4;Rain;87;31%;0,3;17.02.2026 18:40:34
+Lohmar;17.02.2026;20:00;3,2;0;20,4;Rain;87;30%;0,1;17.02.2026 18:40:34
+Lohmar;17.02.2026;21:00;3,0;0;20,4;Rain;88;31%;0,1;17.02.2026 18:40:34
