@@ -1,6 +1,6 @@
 import requests
 import csv
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 try:
     from zoneinfo import ZoneInfo  # Python 3.9+
 except ImportError:
@@ -16,8 +16,8 @@ TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
 # Aktuelle Zeit in Berlin holen
 now_berlin = datetime.now(TZ_BERLIN)
-now_iso = now_berlin.strftime("%Y-%m-%dT%H:%M")
-API_URL = f"https://api.brightsky.dev/weather?lat={LAT}&lon={LON}&date={now_iso}&tz=Europe/Berlin"
+start_zeit_api = (now_berlin - timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M")
+API_URL = f"https://api.brightsky.dev/weather?lat={LAT}&lon={LON}&date={start_zeit_api}&tz=Europe/Berlin"
 
 base_path = Path(__file__).parent
 csv_path = base_path / "wetterbericht.csv"
@@ -36,17 +36,16 @@ def hole_wetter_daten():
         data = response.json()
         all_hours = data.get("weather", [])
         
-        # Vergleichszeitpunkt auf die volle Stunde gerundet (in Berlin Zeit)
-        vergleich_zeit = now_berlin.replace(minute=0, second=0, microsecond=0)
+        # Vergleichszeitpunkt (3h zurück), um Lücken durch GitHub-Verspätungen zu füllen
+        vergleich_zeit = (now_berlin - timedelta(hours=3)).replace(minute=0, second=0, microsecond=0)
         
         forecast_selection = []
         for hour_data in all_hours:
-            # Zeitstempel von API (kommt als UTC+1/+2) in Berlin-Objekt umwandeln
             ts_api = datetime.fromisoformat(hour_data['timestamp']).astimezone(TZ_BERLIN)
             
             if ts_api >= vergleich_zeit:
                 forecast_selection.append(hour_data)
-            if len(forecast_selection) == 3:
+            if len(forecast_selection) == 10:
                 break
         
         existierende = set()
