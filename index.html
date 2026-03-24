@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Wetter-Dashboard Planung</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f0f2f5; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2 { color: #1a73e8; margin-top: 0; }
+        .chart-container { height: 300px; position: relative; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Temperaturverlauf (°C)</h2>
+    <div class="chart-container"><canvas id="tempChart"></canvas></div>
+</div>
+
+<div class="card">
+    <h2>Regenmenge (mm)</h2>
+    <div class="chart-container"><canvas id="rainChart"></canvas></div>
+</div>
+
+<script>
+    async function loadData() {
+        const response = await fetch('wetter_data.json');
+        const data = await response.json();
+
+        const labels = data.map(d => d.label);
+        const temps = data.map(d => d.temp);
+        const rains = data.map(d => d.rain);
+
+        // Temp Chart
+        new Chart(document.getElementById('tempChart'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'Temperatur °C', data: temps, borderColor: '#ff7675', backgroundColor: 'rgba(255, 118, 117, 0.2)', fill: true, tension: 0.4 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        // Rain Chart
+        new Chart(document.getElementById('rainChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'Regen mm', data: rains, backgroundColor: '#74b9ff' }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+    loadData();
+</script>
+</body>
+</html>

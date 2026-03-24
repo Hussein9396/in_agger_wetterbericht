@@ -3,6 +3,7 @@ import csv
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
+import json
 
 # --- KONFIGURATION ---
 ORT = "Lohmar"
@@ -23,6 +24,28 @@ FIELDNAMES = [
 
 def floor_to_hour(dt: datetime) -> datetime:
     return dt.replace(minute=0, second=0, microsecond=0)
+
+def update_dashboard():
+    """"Liest die CSV-Daten und aktualisiert das Dashboard für die Visualisierung."""
+    dashboard_data = []
+    if not csv_path.exists():
+        return
+    
+    with csv_path.open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f, delimiter=";")
+        rows = list(reader)
+
+        for row in rows:
+            dashboard_data.append({
+                "label": f"{row['Datum']} {row['Zeit']}",
+                "temp": float(row["Temperatur"].replace(",", ".")),
+                "rain": float(row["Regen_Menge_mm"].replace(",", ".")),
+            })
+    json_path = base_path / "dashboard_data.json"
+    with json_path.open("w", encoding="utf-8") as f:
+        json.dump(dashboard_data, f, ensure_ascii=False, indent=2)
+        print(f"Dashboard-Daten aktualisiert: {json_path}")
+    
 
 def format_wert(wert):
     # keep your comma formatting; keep empty as "0"
@@ -153,3 +176,4 @@ def speichere_in_csv(zeilen):
 if __name__ == "__main__":
     daten = hole_wetter_daten()
     speichere_in_csv(daten)
+    update_dashboard()

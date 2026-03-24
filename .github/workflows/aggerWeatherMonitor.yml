@@ -5,9 +5,9 @@ on:
     - cron: '0 * * * *'  # Runs every hour at minute 0
   workflow_dispatch:      # Manual trigger button
 
-concurrency:
+concurrency: 
   group: lohmar-weather-monitor
-  cancel-in-progress: true
+  cancel-in-progress: true 
 
 jobs:
   run-and-save:
@@ -33,4 +33,4 @@ jobs:
       - name: Commit and Push Changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Auto-update: Wetterbericht logged"
+          commit_message: "Auto-update: Wetterbericht und Dashboard aktualisiert"
