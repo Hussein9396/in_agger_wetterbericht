@@ -25,7 +25,7 @@
 
 <script>
     async function loadData() {
-        const response = await fetch('wetter_data.json');
+        const response = await fetch('dashboard_data.json');
         const data = await response.json();
 
         const labels = data.map(d => d.label);
